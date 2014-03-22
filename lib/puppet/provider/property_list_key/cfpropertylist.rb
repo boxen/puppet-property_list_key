@@ -1,10 +1,8 @@
-include OSX if Puppet.features.rubycocoa?
-
-Puppet::Type.type(:property_list_key).provide(:rubycocoa) do
+Puppet::Type.type(:property_list_key).provide(:cfpropertylist) do
   desc "An OS X provider for creating property list keys and values"
 
-  defaultfor :feature => :rubycocoa
-  confine    :feature => :rubycocoa
+  confine    :feature => :cfpropertylist
+  defaultfor :feature => :cfpropertylist
 
   def exists?
     return false unless File.file? resource[:path]
@@ -26,7 +24,7 @@ Puppet::Type.type(:property_list_key).provide(:rubycocoa) do
     if File.file? resource[:path]
       plist = read_plist_file(resource[:path])
     else
-      plist = OSX::NSMutableDictionary.alloc.init
+      plist = {}
     end
 
     case resource[:value_type]
@@ -64,7 +62,7 @@ Puppet::Type.type(:property_list_key).provide(:rubycocoa) do
   end
 
   def value
-    read_plist_file(resource[:path])[resource[:key]].to_ruby
+    read_plist_file(resource[:path])[resource[:key]]
   end
 
   def value=(item_value)
@@ -99,17 +97,20 @@ Puppet::Type.type(:property_list_key).provide(:rubycocoa) do
 
   def read_plist_file(file_path)
     begin
-      OSX::NSMutableDictionary.dictionaryWithContentsOfFile(file_path)
-    rescue => e
-      fail("Unable to open the file #{file_path}.  #{e.class}: #{e.inspect}")
+      plist = CFPropertyList::List.new(:file => file_path)
+    rescue IOError => e
+      fail("Unable to open the file #{file_path}.  #{e.inspect}")
     end
+    CFPropertyList.native_types(plist.value)
   end
 
   def write_plist_file(plist, file_path)
     begin
-      plist.writeToFile_atomically(file_path, true)
-    rescue
-      fail("Unable to write the file #{file_path}.  #{e.class}: #{e.inspect}")
+      plist_to_save = CFPropertyList::List.new
+      plist_to_save.value = CFPropertyList.guess(plist)
+      plist_to_save.save(file_path, CFPropertyList::List::FORMAT_XML)
+    rescue IOError => e
+      fail("Unable to write the file #{file_path}.  #{e.inspect}")
     end
   end
 end
